@@ -55,6 +55,12 @@
 #include "visp_hand2eye_calibration/compute_effector_camera_quick.h" 
 #include "visp_hand2eye_calibration/reset.h" 
 
+#include <tf/transform_broadcaster.h>
+#include <visp/vpExponentialMap.h>
+
+#include <kdl_conversions/kdl_msg.h>
+
+
 namespace visp_hand2eye_calibration{ 
   class Client{
   private:
@@ -68,13 +74,20 @@ namespace visp_hand2eye_calibration{
     visp_hand2eye_calibration::reset reset_comm;
     visp_hand2eye_calibration::compute_effector_camera emc_comm;
     visp_hand2eye_calibration::compute_effector_camera_quick emc_quick_comm;
-
     
+	tf::TransformBroadcaster br;
+
   public:
     Client();
-    void initAndSimulate();
-    void computeFromTopicStream();
-    void computeUsingQuickService();
+
+    void broadcastTf(vpHomogeneousMatrix m, std::string parent, std::string child);
+    void broadcastTf(KDL::Frame frame, std::string parent, std::string child);
+    KDL::Frame toKDLFrame(vpHomogeneousMatrix M);
+
+    void initAndSimulate_CameraToRobot(double pause_time);
+    void initAndSimulate_CameraToWorld(double pause_time);
+
+    void sendComputingRequest();
  };
 }
 #endif

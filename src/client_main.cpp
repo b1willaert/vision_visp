@@ -55,9 +55,23 @@ int main(int argc,char**argv){
 
   visp_hand2eye_calibration::Client ct;
 
-  ct.initAndSimulate();
+  // The first argument defines the scenario: camera fixed to robot or to world
+  unsigned int mode = 2;
+  if (argc > 1)
+	  mode = atoi(argv[1]);
 
-  ct.computeUsingQuickService();
-  ct.computeFromTopicStream();
+  // The second argument defines the pause_time in between displaying to calibration poses
+  double pause_time = 0.2;
+  if (argc > 2)
+	  pause_time = atol(argv[2]);
+
+  ROS_INFO_STREAM("MODE: " << mode << std::endl);
+  if (mode == 1){
+	  ct.initAndSimulate_CameraToRobot(pause_time);
+  }else{
+	  ct.initAndSimulate_CameraToWorld(pause_time);
+  }
+
+  ct.sendComputingRequest();
   return 0 ;
 }

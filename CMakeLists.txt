@@ -5,7 +5,12 @@ find_package(catkin REQUIRED COMPONENTS
   visp_bridge
   message_generation
   image_proc
+  tf_conversions 
+  kdl_conversions
 )
+
+find_package(orocos_kdl REQUIRED)
+include_directories(${orocos_kdl_INCLUDE_DIRS})
 
 # TO FIX, VISP_DEFINITIONS should come from visp_bridge dependency
 find_package(VISP REQUIRED)
@@ -53,6 +58,8 @@ add_executable(visp_hand2eye_calibration_client
   src/client_main.cpp
 )
 target_link_libraries(visp_hand2eye_calibration_client visp_hand2eye_calibration_common ${catkin_LIBRARIES})
+target_link_libraries(visp_hand2eye_calibration_client visp_hand2eye_calibration_common ${orocos_kdl_LIBRARIES}) 
+
 add_dependencies(visp_hand2eye_calibration_client ${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_gencpp)
 
 install(

@@ -56,6 +56,10 @@
 #include <visp/vpCalibration.h>
 #include <visp/vpExponentialMap.h>
 
+#include <kdl_conversions/kdl_msg.h>
+#include <tf_conversions/tf_kdl.h>
+
+
 namespace visp_hand2eye_calibration
 {
 Client::Client()
@@ -75,9 +79,43 @@ Client::Client()
                                                                                             visp_hand2eye_calibration::compute_effector_camera_quick_service);
 }
 
-void Client::initAndSimulate()
+void Client::broadcastTf(vpHomogeneousMatrix M, std::string parent, std::string child){
+
+    geometry_msgs::Transform tf_msg;
+    tf_msg = visp_bridge::toGeometryMsgsTransform(M);
+
+    KDL::Frame frame;
+    tf::transformMsgToKDL(tf_msg,frame);
+
+	tf::Transform tf;
+	tf::transformKDLToTF(frame,tf);
+
+	br.sendTransform(tf::StampedTransform(tf, ros::Time::now(), parent, child));
+}
+
+void Client::broadcastTf(KDL::Frame frame, std::string parent, std::string child){
+
+	tf::Transform tf;
+	tf::transformKDLToTF(frame,tf);
+
+	br.sendTransform(tf::StampedTransform(tf, ros::Time::now(), parent, child));
+}
+
+KDL::Frame Client::toKDLFrame(vpHomogeneousMatrix M){
+
+    geometry_msgs::Transform tf_msg;
+    tf_msg = visp_bridge::toGeometryMsgsTransform(M);
+
+    KDL::Frame frame;
+    tf::transformMsgToKDL(tf_msg,frame);
+
+    return frame;
+}
+
+
+void Client::initAndSimulate_CameraToRobot(double pause_time)
 {
-  ROS_INFO("Waiting for topics...");
+  ROS_INFO("Camera fixed to the robot - Waiting for topics...");
   ros::Duration(1.).sleep();
   while(!reset_service_.call(reset_comm)){
     if(!ros::ok()) return;
@@ -86,74 +124,194 @@ void Client::initAndSimulate()
 
 
   // We want to calibrate the hand to eye extrinsic camera parameters from 6 couple of poses: cMo and wMe
-  const int N = 6;
+  const int N = 9;
+  ROS_INFO_STREAM("Number of stations: " << N <<std::endl);
   // Input: six couple of poses used as input in the calibration proces
-  vpHomogeneousMatrix cMo; // eye (camera) to object transformation. The object frame is attached to the calibrartion grid
-  vpHomogeneousMatrix wMe; // world to hand (end-effector) transformation
-  vpHomogeneousMatrix eMc; // hand (end-effector) to eye (camera) transformation
 
-  // Initialize an eMc transformation used to produce the simulated input transformations cMo and wMe
-  vpTranslationVector etc(0.1, 0.2, 0.3);
-  vpThetaUVector erc;
-  erc[0] = vpMath::rad(10); // 10 deg
-  erc[1] = vpMath::rad(-10); // -10 deg
-  erc[2] = vpMath::rad(25); // 25 deg
+  KDL::Frame cTo;
+  KDL::Frame oTc;
+  KDL::Frame bTe;
+  KDL::Frame eTc;
+  KDL::Frame wTo;
+  KDL::Frame wTb;
+  KDL::Frame bTo;
 
-  eMc.buildFrom(etc, erc);
+  // Define the world frame
+  vpHomogeneousMatrix I;
+
+  // Define the end-effector to camera transform
+  eTc.p.x(0.12);
+  eTc.p.z(0.07);
+  eTc.M = KDL::Rotation::RPY(vpMath::rad(0),vpMath::rad(0),vpMath::rad(45));
+
+  geometry_msgs::Transform pose_e_c;
+  tf::transformKDLToMsg(eTc,pose_e_c);
   ROS_INFO("1) GROUND TRUTH:");
+  ROS_INFO_STREAM("End-effector to camera transformation: " <<std::endl<<pose_e_c<<std::endl);
 
-  ROS_INFO_STREAM("hand to eye transformation: " <<std::endl<<visp_bridge::toGeometryMsgsTransform(eMc)<<std::endl);
+  // Define the object location w.r.t. the world frame
+  wTo.p.x(0.0);
+  wTo.p.y(-0.1);
 
-  vpColVector v_c(6); // camera velocity used to produce 6 simulated poses
+  // Define the robot location w.r.t the world frame
+  wTb.p.x(0.0);
+  wTb.p.y(0.5);
+
+  // Define the robot to object transform
+  bTo = wTb.Inverse() * wTo;
+
+  // 6 poses
+  double max_noise = std::numeric_limits<double>::min();
+  double min_noise = std::numeric_limits<double>::max();
+  double radius = 0.5;
+  // initialize random seed
+  srand (time(NULL));
   for (int i = 0; i < N; i++)
   {
-    v_c = 0;
-    if (i == 0)
-    {
-      // Initialize first poses
-      cMo.buildFrom(0, 0, 0.5, 0, 0, 0); // z=0.5 m
-      wMe.buildFrom(0, 0, 0, 0, 0, 0); // Id
-    }
-    else if (i == 1)
-      v_c[3] = M_PI / 8;
-    else if (i == 2)
-      v_c[4] = M_PI / 8;
-    else if (i == 3)
-      v_c[5] = M_PI / 10;
-    else if (i == 4)
-      v_c[0] = 0.5;
-    else if (i == 5)
-      v_c[1] = 0.8;
 
-    vpHomogeneousMatrix cMc; // camera displacement
-    cMc = vpExponentialMap::direct(v_c); // Compute the camera displacement due to the velocity applied to the camera
-    if (i > 0)
-    {
-      // From the camera displacement cMc, compute the wMe and cMo matrixes
-      cMo = cMc.inverse() * cMo;
-      wMe = wMe * eMc * cMc * eMc.inverse();
+	oTc.p.x(radius*cos(i*M_PI/(N-1)));
+	oTc.p.y(radius*sin(i*M_PI/(N-1)));
+	oTc.p.z(radius);
+	oTc.M = KDL::Rotation::RPY(0, -3*M_PI/4, i*M_PI/(N-1));
+	oTc.M.DoRotZ(i*M_PI/((N-1)));
+	cTo = oTc.Inverse();
 
-    }
+	bTe = wTb.Inverse() * wTo * oTc * eTc.Inverse();
+
+	double noise = 0.01*(((rand() % 100) - 50) /50.0);
+	max_noise=std::max(max_noise,noise);
+	min_noise=std::min(min_noise,noise);
+	bTe.p.x( bTe.p.x() + noise);
+
+	broadcastTf(I,"/world","/world_");
+	broadcastTf(wTb,"/world","/base");
+	broadcastTf(wTo,"/world","/object");
+	broadcastTf(oTc,"/object","/camera1");
+	broadcastTf(eTc.Inverse(),"/camera1","/end-effector1");
+	broadcastTf(bTe,"/base","/end-effector1_measured");
 
     geometry_msgs::Transform pose_c_o;
-    pose_c_o = visp_bridge::toGeometryMsgsTransform(cMo);
-    geometry_msgs::Transform pose_w_e;
-    pose_w_e = visp_bridge::toGeometryMsgsTransform(wMe);
+    tf::transformKDLToMsg(cTo,pose_c_o);
+    geometry_msgs::Transform pose_b_e;
+    tf::transformKDLToMsg(bTe,pose_b_e);
     camera_object_publisher_.publish(pose_c_o);
-    world_effector_publisher_.publish(pose_w_e);
+    world_effector_publisher_.publish(pose_b_e);
     emc_quick_comm.request.camera_object.transforms.push_back(pose_c_o);
-    emc_quick_comm.request.world_effector.transforms.push_back(pose_w_e);
+    emc_quick_comm.request.world_effector.transforms.push_back(pose_b_e);
+
+    ros::Duration(pause_time).sleep();
 
   }
-  ros::Duration(1.).sleep();
+  ROS_INFO_STREAM("Noise min and max values (mm): " << 1000*min_noise << " / " << 1000*max_noise << std::endl);
 
 }
 
-void Client::computeUsingQuickService()
+
+void Client::initAndSimulate_CameraToWorld(double pause_time){
+
+	  ROS_INFO("Camera fixed to the world - Waiting for topics...");
+	  ros::Duration(1.).sleep();
+	  while(!reset_service_.call(reset_comm)){
+	    if(!ros::ok()) return;
+	    ros::Duration(1).sleep();
+	  }
+
+	  // We want to calibrate the hand to eye extrinsic camera parameters from 6 couple of poses: cMo and wMe
+	  const int N = 9;
+	  ROS_INFO_STREAM("Number of stations: " << N <<std::endl);
+	  // Input: six couple of poses used as input in the calibration proces
+
+	  KDL::Frame cTm;
+	  KDL::Frame mTc;
+	  KDL::Frame bTe;
+	  KDL::Frame eTm;
+	  KDL::Frame wTc;
+	  KDL::Frame wTb;
+	  KDL::Frame wTm;
+	  KDL::Frame bTc;
+
+	  // Define the world frame
+	  vpHomogeneousMatrix I;
+
+	  // Define the end-effector to camera transform
+	  eTm.p.x(0.08);
+	  eTm.p.y(0.08);
+	  eTm.p.z(0.07);
+	  eTm.M = KDL::Rotation::RPY(vpMath::rad(0),vpMath::rad(0),vpMath::rad(45));
+
+	  geometry_msgs::Transform pose_e_m;
+	  tf::transformKDLToMsg(eTm,pose_e_m);
+	  ROS_INFO("1) GROUND TRUTH:");
+	  ROS_INFO_STREAM("End-effector to marker transformation: " <<std::endl<<pose_e_m<<std::endl);
+
+	  // Define the camera location w.r.t. the world frame
+	  wTc.p.x(0.0);
+	  wTc.p.y(-0.25);
+	  wTc.p.z(0.6);
+	  wTc.M.DoRotX(-3*M_PI/4);
+
+	  // Define the robot location w.r.t the world frame
+	  wTb.p.x(0.0);
+	  wTb.p.y(0.5);
+
+	  // Define the robot to camera transform
+	  bTc = wTb.Inverse() * wTc;
+
+	  // 6 poses
+	  double max_noise = std::numeric_limits<double>::min();
+	  double min_noise = std::numeric_limits<double>::max();
+	  double radius = 0.3;
+	  // initialize random seed
+	  srand (time(NULL));
+	  for (int i = 0; i < N; i++)
+	  {
+
+		wTm.p.x(radius*cos(i*M_PI/(N-1)));
+		wTm.p.y(radius*sin(i*M_PI/(N-1)));
+		wTm.p.z(radius);
+		wTm.M = KDL::Rotation::RPY( 0,M_PI/2,0);
+		wTm.M.DoRotX(-i*M_PI/(N-1));
+		wTm.M.DoRotY(i*M_PI/(2*(N-1)));
+
+		cTm = wTc.Inverse() * wTm;
+		mTc = cTm.Inverse();
+
+		bTe = wTb.Inverse() * wTc * cTm * eTm.Inverse();
+
+		double noise = 0.0*(((rand() % 100) - 50) /50.0);
+		max_noise=std::max(max_noise,noise);
+		min_noise=std::min(min_noise,noise);
+		bTe.p.x( bTe.p.x() + noise);
+
+		broadcastTf(I,"/world","/world_");
+		broadcastTf(wTb,"/world","/base");
+		broadcastTf(wTc,"/world","/camera2");
+		broadcastTf(cTm,"/camera2","/marker");
+		broadcastTf(eTm.Inverse(),"/marker","/end-effector2");
+		broadcastTf(bTe,"/base","/end-effector2_measured");
+
+	    geometry_msgs::Transform pose_m_c;
+	    tf::transformKDLToMsg(mTc,pose_m_c);
+	    geometry_msgs::Transform pose_b_e;
+	    tf::transformKDLToMsg(bTe,pose_b_e);
+	    camera_object_publisher_.publish(pose_m_c);
+	    world_effector_publisher_.publish(pose_b_e);
+	    emc_quick_comm.request.camera_object.transforms.push_back(pose_m_c);
+	    emc_quick_comm.request.world_effector.transforms.push_back(pose_b_e);
+
+	    ros::Duration(pause_time).sleep();
+
+	  }
+	  ROS_INFO_STREAM("Noise min and max values (mm): " << 1000*min_noise << " / " << 1000*max_noise << std::endl);
+
+
+}
+
+void Client::sendComputingRequest()
 {
-  vpHomogeneousMatrix eMc;
-  vpThetaUVector erc;
-  ROS_INFO("2) QUICK SERVICE:");
+  //vpHomogeneousMatrix eMc;
+  //vpThetaUVector erc;
+  ROS_INFO("Computing request send to calibration node:");
   if (compute_effector_camera_quick_service_.call(emc_quick_comm))
   {
     ROS_INFO_STREAM("hand_camera: "<< std::endl << emc_quick_comm.response.effector_camera);
@@ -164,22 +322,9 @@ void Client::computeUsingQuickService()
   }
 }
 
-void Client::computeFromTopicStream()
-{
-  vpHomogeneousMatrix eMc;
-  vpThetaUVector erc;
-  ROS_INFO("3) TOPIC STREAM:");
-  if (compute_effector_camera_service_.call(emc_comm))
-  {
-    ROS_INFO_STREAM("hand_camera: " << std::endl << emc_comm.response.effector_camera);
-  }
-  else
-  {
-    ROS_ERROR("Failed to call service");
-  }
+}
 
-}
-}
+
 
 /*
  * Local variables:
