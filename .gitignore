@@ -1,11 +1,3 @@
-*.pyc
-*.*~
-bin/
-build/
-include/
-lib/
-*_gen/
-.cproject
-.project
-.pydevproject
-src/visp_hand2eye_calibration/
+*~
+CMakeLists.txt
+
