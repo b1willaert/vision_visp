@@ -57,6 +57,8 @@ namespace visp_hand2eye_calibration
   extern std::string node_prefix;
   extern std::string camera_object_topic;
   extern std::string world_effector_topic;
+  extern std::string desired_robot_poses_topic;
+
   extern std::string compute_effector_camera_service;
   extern std::string compute_effector_camera_quick_service;
 

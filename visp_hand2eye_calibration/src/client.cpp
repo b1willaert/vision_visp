@@ -50,6 +50,8 @@
 #include "client.h"
 #include <geometry_msgs/Transform.h>
 #include "visp_hand2eye_calibration/TransformArray.h"
+#include "visp_hand2eye_calibration/TwoTransformArrays.h"
+
 #include <visp_bridge/3dpose.h>
 #include "names.h"
 
@@ -64,17 +66,12 @@ namespace visp_hand2eye_calibration
 {
 Client::Client()
 {
-  camera_object_publisher_
-      = n_.advertise<geometry_msgs::Transform> (visp_hand2eye_calibration::camera_object_topic, 1000);
-  world_effector_publisher_
-      = n_.advertise<geometry_msgs::Transform> (visp_hand2eye_calibration::world_effector_topic, 1000);
+	desired_endeffector_poses_
+      = n_.advertise<visp_hand2eye_calibration::TransformArray> (visp_hand2eye_calibration::desired_robot_poses_topic, 1000);
 
   reset_service_
       = n_.serviceClient<visp_hand2eye_calibration::reset> (visp_hand2eye_calibration::reset_service);
-  compute_effector_camera_service_
-      = n_.serviceClient<visp_hand2eye_calibration::compute_effector_camera> (
-                                                                                      visp_hand2eye_calibration::compute_effector_camera_service);
-  compute_effector_camera_quick_service_
+  compute_transform_service_
       = n_.serviceClient<visp_hand2eye_calibration::compute_effector_camera_quick> (
                                                                                             visp_hand2eye_calibration::compute_effector_camera_quick_service);
 }
@@ -113,7 +110,7 @@ KDL::Frame Client::toKDLFrame(vpHomogeneousMatrix M){
 }
 
 
-void Client::initAndSimulate_CameraToRobot(double pause_time)
+void Client::initAndSimulate_CameraToRobot(double pause_time, double radius)
 {
   ROS_INFO("Camera fixed to the robot - Waiting for topics...");
   ros::Duration(1.).sleep();
@@ -155,7 +152,7 @@ void Client::initAndSimulate_CameraToRobot(double pause_time)
 
   // Define the robot location w.r.t the world frame
   wTb.p.x(0.0);
-  wTb.p.y(0.5);
+  wTb.p.y(0.2 + radius);
 
   // Define the robot to object transform
   bTo = wTb.Inverse() * wTo;
@@ -163,9 +160,10 @@ void Client::initAndSimulate_CameraToRobot(double pause_time)
   // 6 poses
   double max_noise = std::numeric_limits<double>::min();
   double min_noise = std::numeric_limits<double>::max();
-  double radius = 0.5;
   // initialize random seed
   srand (time(NULL));
+  // define msg for desired robot poses
+  visp_hand2eye_calibration::TransformArray desired_endeffector_poses_msg;
   for (int i = 0; i < N; i++)
   {
 
@@ -194,20 +192,22 @@ void Client::initAndSimulate_CameraToRobot(double pause_time)
     tf::transformKDLToMsg(cTo,pose_c_o);
     geometry_msgs::Transform pose_b_e;
     tf::transformKDLToMsg(bTe,pose_b_e);
-    camera_object_publisher_.publish(pose_c_o);
-    world_effector_publisher_.publish(pose_b_e);
-    emc_quick_comm.request.camera_object.transforms.push_back(pose_c_o);
-    emc_quick_comm.request.world_effector.transforms.push_back(pose_b_e);
+
+    desired_endeffector_poses_msg.transforms.push_back(pose_b_e);
+    transform_comm.request.camera_object.transforms.push_back(pose_c_o);
+    transform_comm.request.world_effector.transforms.push_back(pose_b_e);
 
     ros::Duration(pause_time).sleep();
 
   }
+  desired_endeffector_poses_.publish(desired_endeffector_poses_msg);
   ROS_INFO_STREAM("Noise min and max values (mm): " << 1000*min_noise << " / " << 1000*max_noise << std::endl);
 
+  ros::Duration(2).sleep();
 }
 
 
-void Client::initAndSimulate_CameraToWorld(double pause_time){
+void Client::initAndSimulate_CameraToWorld(double pause_time, double radius){
 
 	  ROS_INFO("Camera fixed to the world - Waiting for topics...");
 	  ros::Duration(1.).sleep();
@@ -252,7 +252,7 @@ void Client::initAndSimulate_CameraToWorld(double pause_time){
 
 	  // Define the robot location w.r.t the world frame
 	  wTb.p.x(0.0);
-	  wTb.p.y(0.5);
+	  wTb.p.y(0.2 + radius);
 
 	  // Define the robot to camera transform
 	  bTc = wTb.Inverse() * wTc;
@@ -260,9 +260,10 @@ void Client::initAndSimulate_CameraToWorld(double pause_time){
 	  // 6 poses
 	  double max_noise = std::numeric_limits<double>::min();
 	  double min_noise = std::numeric_limits<double>::max();
-	  double radius = 0.3;
 	  // initialize random seed
 	  srand (time(NULL));
+	  // define msg for desired robot poses
+	  visp_hand2eye_calibration::TransformArray desired_endeffector_poses_msg;
 	  for (int i = 0; i < N; i++)
 	  {
 
@@ -294,14 +295,15 @@ void Client::initAndSimulate_CameraToWorld(double pause_time){
 	    tf::transformKDLToMsg(mTc,pose_m_c);
 	    geometry_msgs::Transform pose_b_e;
 	    tf::transformKDLToMsg(bTe,pose_b_e);
-	    camera_object_publisher_.publish(pose_m_c);
-	    world_effector_publisher_.publish(pose_b_e);
-	    emc_quick_comm.request.camera_object.transforms.push_back(pose_m_c);
-	    emc_quick_comm.request.world_effector.transforms.push_back(pose_b_e);
+
+	    desired_endeffector_poses_msg.transforms.push_back(pose_b_e);
+	    transform_comm.request.camera_object.transforms.push_back(pose_m_c);
+	    transform_comm.request.world_effector.transforms.push_back(pose_b_e);
 
 	    ros::Duration(pause_time).sleep();
 
 	  }
+	  desired_endeffector_poses_.publish(desired_endeffector_poses_msg);
 	  ROS_INFO_STREAM("Noise min and max values (mm): " << 1000*min_noise << " / " << 1000*max_noise << std::endl);
 
 
@@ -309,12 +311,11 @@ void Client::initAndSimulate_CameraToWorld(double pause_time){
 
 void Client::sendComputingRequest()
 {
-  //vpHomogeneousMatrix eMc;
-  //vpThetaUVector erc;
+
   ROS_INFO("Computing request send to calibration node:");
-  if (compute_effector_camera_quick_service_.call(emc_quick_comm))
+  if (compute_transform_service_.call(transform_comm))
   {
-    ROS_INFO_STREAM("hand_camera: "<< std::endl << emc_quick_comm.response.effector_camera);
+    ROS_INFO_STREAM("hand_camera: "<< std::endl << transform_comm.response.effector_camera);
   }
   else
   {

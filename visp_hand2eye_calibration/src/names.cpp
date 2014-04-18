@@ -55,6 +55,7 @@ namespace visp_hand2eye_calibration
   std::string node_prefix("/");
   std::string camera_object_topic("camera_object");
   std::string world_effector_topic("world_effector");
+  std::string desired_robot_poses_topic("suggested_robot_poses");
   std::string compute_effector_camera_service("compute_effector_camera");
   std::string compute_effector_camera_quick_service("compute_effector_camera_quick");  
   std::string reset_service("reset");
@@ -64,6 +65,7 @@ namespace visp_hand2eye_calibration
       node_prefix = ros::names::remap("node_prefix");
       camera_object_topic = node_prefix + "camera_object";
       world_effector_topic = node_prefix + "world_effector";
+      desired_robot_poses_topic = node_prefix + "desired_robot_poses";
       compute_effector_camera_service = node_prefix + "compute_effector_camera";
       compute_effector_camera_quick_service = node_prefix + "compute_effector_camera_quick";
       reset_service = node_prefix + "reset";

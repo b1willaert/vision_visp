@@ -26,6 +26,7 @@ add_message_files(
     msg
   FILES
     TransformArray.msg
+    TwoTransformArrays.msg
   )
 add_service_files(
   DIRECTORY 

@@ -63,13 +63,18 @@ int main(int argc,char**argv){
   // The second argument defines the pause_time in between displaying to calibration poses
   double pause_time = 0.2;
   if (argc > 2)
-	  pause_time = atol(argv[2]);
+	  pause_time = atof(argv[2]);
+
+  // The third argument defines the 'dimension' of the robot motion
+  double radius = 0.3;
+  if (argc > 3)
+	  radius = atof(argv[3]);
 
   ROS_INFO_STREAM("MODE: " << mode << std::endl);
   if (mode == 1){
-	  ct.initAndSimulate_CameraToRobot(pause_time);
+	  ct.initAndSimulate_CameraToRobot(pause_time,radius);
   }else{
-	  ct.initAndSimulate_CameraToWorld(pause_time);
+	  ct.initAndSimulate_CameraToWorld(pause_time,radius);
   }
 
   ct.sendComputingRequest();

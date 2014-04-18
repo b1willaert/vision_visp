@@ -65,15 +65,13 @@ namespace visp_hand2eye_calibration{
   class Client{
   private:
     ros::NodeHandle n_;
-    ros::Publisher camera_object_publisher_;
-    ros::Publisher world_effector_publisher_;
+    ros::Publisher desired_endeffector_poses_;
+
     ros::ServiceClient reset_service_;
-    ros::ServiceClient compute_effector_camera_service_;
-    ros::ServiceClient compute_effector_camera_quick_service_;
+    ros::ServiceClient compute_transform_service_;
 
     visp_hand2eye_calibration::reset reset_comm;
-    visp_hand2eye_calibration::compute_effector_camera emc_comm;
-    visp_hand2eye_calibration::compute_effector_camera_quick emc_quick_comm;
+    visp_hand2eye_calibration::compute_effector_camera_quick transform_comm;
     
 	tf::TransformBroadcaster br;
 
@@ -84,8 +82,8 @@ namespace visp_hand2eye_calibration{
     void broadcastTf(KDL::Frame frame, std::string parent, std::string child);
     KDL::Frame toKDLFrame(vpHomogeneousMatrix M);
 
-    void initAndSimulate_CameraToRobot(double pause_time);
-    void initAndSimulate_CameraToWorld(double pause_time);
+    void initAndSimulate_CameraToRobot(double pause_time, double radius);
+    void initAndSimulate_CameraToWorld(double pause_time, double radius);
 
     void sendComputingRequest();
  };
