@@ -62,6 +62,7 @@
 #include <tf_conversions/tf_kdl.h>
 
 
+
 namespace visp_hand2eye_calibration
 {
 Client::Client()
@@ -110,7 +111,7 @@ KDL::Frame Client::toKDLFrame(vpHomogeneousMatrix M){
 }
 
 
-void Client::initAndSimulate_CameraToRobot(double pause_time, double radius)
+void Client::initAndSimulate_CameraToRobot(double pause_time, double noise_ampl)
 {
   ROS_INFO("Camera fixed to the robot - Waiting for topics...");
   ros::Duration(1.).sleep();
@@ -124,14 +125,6 @@ void Client::initAndSimulate_CameraToRobot(double pause_time, double radius)
   const int N = 9;
   ROS_INFO_STREAM("Number of stations: " << N <<std::endl);
   // Input: six couple of poses used as input in the calibration proces
-
-  KDL::Frame cTo;
-  KDL::Frame oTc;
-  KDL::Frame bTe;
-  KDL::Frame eTc;
-  KDL::Frame wTo;
-  KDL::Frame wTb;
-  KDL::Frame bTo;
 
   // Define the world frame
   vpHomogeneousMatrix I;
@@ -151,6 +144,7 @@ void Client::initAndSimulate_CameraToRobot(double pause_time, double radius)
   wTo.p.y(-0.1);
 
   // Define the robot location w.r.t the world frame
+  double radius = 0.5;
   wTb.p.x(0.0);
   wTb.p.y(0.2 + radius);
 
@@ -201,13 +195,13 @@ void Client::initAndSimulate_CameraToRobot(double pause_time, double radius)
 
   }
   desired_endeffector_poses_.publish(desired_endeffector_poses_msg);
-  ROS_INFO_STREAM("Noise min and max values (mm): " << 1000*min_noise << " / " << 1000*max_noise << std::endl);
+  ROS_INFO_STREAM("Noise min and max values : " << min_noise << " / " << max_noise << std::endl);
 
   ros::Duration(2).sleep();
 }
 
 
-void Client::initAndSimulate_CameraToWorld(double pause_time, double radius){
+void Client::initAndSimulate_CameraToWorld(double pause_time, double noise_ampl){
 
 	  ROS_INFO("Camera fixed to the world - Waiting for topics...");
 	  ros::Duration(1.).sleep();
@@ -217,27 +211,18 @@ void Client::initAndSimulate_CameraToWorld(double pause_time, double radius){
 	  }
 
 	  // We want to calibrate the hand to eye extrinsic camera parameters from 6 couple of poses: cMo and wMe
-	  const int N = 9;
+	  const int N = 7;
 	  ROS_INFO_STREAM("Number of stations: " << N <<std::endl);
 	  // Input: six couple of poses used as input in the calibration proces
-
-	  KDL::Frame cTm;
-	  KDL::Frame mTc;
-	  KDL::Frame bTe;
-	  KDL::Frame eTm;
-	  KDL::Frame wTc;
-	  KDL::Frame wTb;
-	  KDL::Frame wTm;
-	  KDL::Frame bTc;
 
 	  // Define the world frame
 	  vpHomogeneousMatrix I;
 
 	  // Define the end-effector to camera transform
-	  eTm.p.x(0.08);
-	  eTm.p.y(0.08);
-	  eTm.p.z(0.07);
-	  eTm.M = KDL::Rotation::RPY(vpMath::rad(0),vpMath::rad(0),vpMath::rad(45));
+	  eTm.p.x(0.015);
+	  eTm.p.y(0.0);
+	  eTm.p.z(0.03);
+	  eTm.M = KDL::Rotation::RPY(vpMath::rad(0),vpMath::rad(0),vpMath::rad(-135));
 
 	  geometry_msgs::Transform pose_e_m;
 	  tf::transformKDLToMsg(eTm,pose_e_m);
@@ -246,13 +231,14 @@ void Client::initAndSimulate_CameraToWorld(double pause_time, double radius){
 
 	  // Define the camera location w.r.t. the world frame
 	  wTc.p.x(0.0);
-	  wTc.p.y(-0.25);
-	  wTc.p.z(0.6);
-	  wTc.M.DoRotX(-3*M_PI/4);
+	  wTc.p.y(-0.5);
+	  wTc.p.z(0.5);
+	  wTc.M.DoRotZ(M_PI/2);
+	  wTc.M.DoRotY(M_PI/4);
 
 	  // Define the robot location w.r.t the world frame
 	  wTb.p.x(0.0);
-	  wTb.p.y(0.2 + radius);
+	  wTb.p.y(0.0);
 
 	  // Define the robot to camera transform
 	  bTc = wTb.Inverse() * wTc;
@@ -260,29 +246,79 @@ void Client::initAndSimulate_CameraToWorld(double pause_time, double radius){
 	  // 6 poses
 	  double max_noise = std::numeric_limits<double>::min();
 	  double min_noise = std::numeric_limits<double>::max();
+	  double max_noise_angular = std::numeric_limits<double>::min();
+	  double min_noise_angular = std::numeric_limits<double>::max();
 	  // initialize random seed
 	  srand (time(NULL));
 	  // define msg for desired robot poses
 	  visp_hand2eye_calibration::TransformArray desired_endeffector_poses_msg;
 	  for (int i = 0; i < N; i++)
 	  {
+		if (i==0){
+			wTm.p.x(0.25);
+			wTm.p.y(-0.5);
+			wTm.p.z(0.3);
+			wTm.M = KDL::Rotation::RPY( 0,0,-M_PI);
+		}
+		else if (i==1){
+			wTm.p.y(0.1);
+			wTm.p.z(0.4);
+			wTm.M.DoRotZ(M_PI/4);
+			wTm.M.DoRotY(M_PI/4);
+		}
+		else if (i==2){
+			wTm.p.x(0.0);
+			wTm.p.y(-0.1);
+			wTm.p.z(0.3);
+			wTm.M = KDL::Rotation::RPY( 0,0,-M_PI);
+		}
+		else if (i==3){
+			wTm.p.z(0.4);
+			wTm.p.y(-0.6);
+			wTm.M = KDL::Rotation::RPY( 0,0,-M_PI);
+			wTm.M.DoRotZ(M_PI/4);
+			wTm.M.DoRotY(M_PI/4);
+		}
+		else if (i==4){
+			wTm.p.z(0.4);
+			wTm.p.y(-0.6);
+			wTm.M = KDL::Rotation::RPY( 0,0,-M_PI);
+			wTm.M.DoRotZ(-M_PI/4);
+			wTm.M.DoRotY(-M_PI/4);
+		}
+		else if (i==5){
+			wTm.p.x(-0.25);
+			wTm.p.y(-0.5);
+			wTm.p.z(0.3);
+			wTm.M = KDL::Rotation::RPY( 0,0,-M_PI);
+		}
+		else if (i==6){
+			wTm.p.y(-0.1);
+			wTm.p.z(0.2);
+     		wTm.M.DoRotZ(-M_PI/4);
+			wTm.M.DoRotY(-M_PI/4);
+		}
 
-		wTm.p.x(radius*cos(i*M_PI/(N-1)));
-		wTm.p.y(radius*sin(i*M_PI/(N-1)));
-		wTm.p.z(radius);
-		wTm.M = KDL::Rotation::RPY( 0,M_PI/2,0);
-		wTm.M.DoRotX(-i*M_PI/(N-1));
-		wTm.M.DoRotY(i*M_PI/(2*(N-1)));
+
+
 
 		cTm = wTc.Inverse() * wTm;
 		mTc = cTm.Inverse();
-
 		bTe = wTb.Inverse() * wTc * cTm * eTm.Inverse();
 
-		double noise = 0.0*(((rand() % 100) - 50) /50.0);
-		max_noise=std::max(max_noise,noise);
-		min_noise=std::min(min_noise,noise);
-		bTe.p.x( bTe.p.x() + noise);
+		// Translation noise
+		double noise_linear = noise_ampl*(((rand() % 100) - 50) /50.0);
+		max_noise=std::max(max_noise,noise_linear);
+		min_noise=std::min(min_noise,noise_linear);
+		bTe.p.x( bTe.p.x() + noise_linear);
+		bTe.p.y( bTe.p.y() + noise_linear);
+
+		// Rotational noise
+		double noise_angular = M_PI*(100*noise_ampl*(((rand() % 100) - 50) /50.0))/180;
+		max_noise_angular=std::max(max_noise_angular,noise_angular);
+		min_noise_angular=std::min(min_noise_angular,noise_angular);
+		bTe.M.DoRotX(noise_angular);
+
 
 		broadcastTf(I,"/world","/world_");
 		broadcastTf(wTb,"/world","/base");
@@ -304,7 +340,9 @@ void Client::initAndSimulate_CameraToWorld(double pause_time, double radius){
 
 	  }
 	  desired_endeffector_poses_.publish(desired_endeffector_poses_msg);
-	  ROS_INFO_STREAM("Noise min and max values (mm): " << 1000*min_noise << " / " << 1000*max_noise << std::endl);
+	  ROS_INFO_STREAM("Translational noise - limits (m) : " << min_noise << " / " << max_noise << std::endl);
+	  ROS_INFO_STREAM("Rotational noise - limits (degrees) : " << 180*min_noise_angular/M_PI << " / " << 180*max_noise_angular/M_PI << std::endl);
+
 
 
 }
@@ -316,6 +354,20 @@ void Client::sendComputingRequest()
   if (compute_transform_service_.call(transform_comm))
   {
     ROS_INFO_STREAM("hand_camera: "<< std::endl << transform_comm.response.effector_camera);
+    KDL::Frame result;
+	tf::transformMsgToKDL(transform_comm.response.effector_camera,result);
+	KDL::Vector translation_error_vector = (eTm.p - result.p);
+    ROS_INFO_STREAM("Translation error: " << translation_error_vector.Norm());
+    KDL::Vector axis;
+    KDL::Vector axis_result;
+    double angle, angle_result;
+    angle = eTm.M.GetRotAngle(axis);
+    angle_result = result.M.GetRotAngle(axis_result);
+    double axis_diff = KDL::dot(axis,axis_result);
+    double angle_diff = angle - angle_result;
+    ROS_INFO_STREAM("Rotation angle error: " << 180*angle_diff/M_PI << " degrees" <<std::endl);
+    ROS_INFO_STREAM("Rotation axis error: " << 180*acos(axis_diff)/M_PI << " degrees" <<std::endl);
+
   }
   else
   {

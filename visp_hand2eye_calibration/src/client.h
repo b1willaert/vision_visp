@@ -75,6 +75,22 @@ namespace visp_hand2eye_calibration{
     
 	tf::TransformBroadcaster br;
 
+	  KDL::Frame cTm;
+	  KDL::Frame mTc;
+	  KDL::Frame bTe;
+	  KDL::Frame eTm;
+	  KDL::Frame wTc;
+	  KDL::Frame wTb;
+	  KDL::Frame oTc;
+	  KDL::Frame cTo;
+	  KDL::Frame wTo;
+	  KDL::Frame wTm;
+	  KDL::Frame bTc;
+	  KDL::Frame bTo;
+	  KDL::Frame eTc;
+	  KDL::Frame cTe;
+
+
   public:
     Client();
 
@@ -82,8 +98,8 @@ namespace visp_hand2eye_calibration{
     void broadcastTf(KDL::Frame frame, std::string parent, std::string child);
     KDL::Frame toKDLFrame(vpHomogeneousMatrix M);
 
-    void initAndSimulate_CameraToRobot(double pause_time, double radius);
-    void initAndSimulate_CameraToWorld(double pause_time, double radius);
+    void initAndSimulate_CameraToRobot(double pause_time, double noise_ampl);
+    void initAndSimulate_CameraToWorld(double pause_time, double noise_ampl);
 
     void sendComputingRequest();
  };

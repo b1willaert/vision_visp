@@ -105,8 +105,12 @@ namespace visp_hand2eye_calibration
     std::vector<vpHomogeneousMatrix> cMo_vec;
     std::vector<vpHomogeneousMatrix> wMe_vec;
     for(unsigned int i=0;i<camera_object.transforms.size();i++){
+        ROS_INFO("-------------------");
       cMo_vec.push_back(visp_bridge::toVispHomogeneousMatrix(camera_object.transforms[i]));
       wMe_vec.push_back(visp_bridge::toVispHomogeneousMatrix(world_effector.transforms[i]));
+      ROS_INFO_STREAM("Camera to object transformation: " <<std::endl<<camera_object.transforms[i]<<std::endl);
+      ROS_INFO("----");
+      ROS_INFO_STREAM("World to end-effector transformation: " <<std::endl<<world_effector.transforms[i]<<std::endl);
     }
     if (camera_object.transforms.size() != world_effector.transforms.size() || world_effector.transforms.size() < 2)
     {
